@@ -1,0 +1,94 @@
+@{
+    ViewData["Title"] = "Demonstração de Cache HTTP";
+}
+
+<div class="container mt-4">
+
+    <h2 class="mb-3">Cache HTTP, ETag e 304 Not Modified</h2>
+
+    <p class="text-muted">
+        Endpoint: <code>GET /api/chamados/resumo</code>.
+        A primeira consulta retorna <strong>200 OK</strong> com o conteúdo e o cabeçalho <code>ETag</code>.
+        A consulta condicional envia <code>If-None-Match</code> com esse ETag e, se nada mudou,
+        recebe <strong>304 Not Modified</strong> sem corpo.
+    </p>
+
+    <div class="mb-3">
+        <button id="btnNormal" class="btn btn-primary">1) Consultar (sem If-None-Match)</button>
+        <button id="btnCondicional" class="btn btn-success ms-2">2) Consultar com If-None-Match</button>
+        <button id="btnLimpar" class="btn btn-outline-secondary ms-2">Limpar</button>
+    </div>
+
+    <p class="small text-muted">
+        Para ver o ETag mudar: crie ou altere um chamado e consulte de novo
+        (aguarde mais de 5 segundos, que é o tempo de cache do servidor).
+    </p>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle">
+            <thead>
+                <tr>
+                    <th>Hora</th>
+                    <th>If-None-Match enviado</th>
+                    <th>Status</th>
+                    <th>ETag recebido</th>
+                    <th>Age</th>
+                    <th>Corpo</th>
+                </tr>
+            </thead>
+            <tbody id="registro"></tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const url = "/api/chamados/resumo";
+        let etagGuardado = null;
+
+        async function consultar(condicional) {
+            const cabecalhos = {};
+
+            if (condicional && etagGuardado) {
+                cabecalhos["If-None-Match"] = etagGuardado;
+            }
+
+            const resposta = await fetch(url, { headers: cabecalhos });
+            const etag = resposta.headers.get("ETag");
+            let corpo = "(sem corpo)";
+
+            if (resposta.status === 200) {
+                corpo = JSON.stringify(await resposta.json());
+                etagGuardado = etag;
+            }
+
+            const linha = document.createElement("tr");
+            const dados = [
+                new Date().toLocaleTimeString("pt-BR"),
+                cabecalhos["If-None-Match"] || "-",
+                resposta.status + " " + (resposta.status === 304 ? "Not Modified" : resposta.statusText || "OK"),
+                etag || "-",
+                resposta.headers.get("Age") || "-",
+                corpo
+            ];
+
+            dados.forEach(function (texto, indice) {
+                const celula = document.createElement("td");
+                celula.textContent = texto;
+                if (indice === 2) {
+                    celula.className = resposta.status === 304 ? "fw-bold text-success" : "fw-bold";
+                }
+                linha.appendChild(celula);
+            });
+
+            document.getElementById("registro").prepend(linha);
+        }
+
+        document.getElementById("btnNormal").addEventListener("click", function () { consultar(false); });
+        document.getElementById("btnCondicional").addEventListener("click", function () { consultar(true); });
+        document.getElementById("btnLimpar").addEventListener("click", function () {
+            document.getElementById("registro").innerHTML = "";
+            etagGuardado = null;
+        });
+    </script>
+}

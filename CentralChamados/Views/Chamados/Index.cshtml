@@ -1,0 +1,242 @@
+@model IEnumerable<CentralChamados.Models.Chamado>
+
+@{
+    ViewData["Title"] = "Chamados";
+}
+
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Central de Chamados</h2>
+
+        <div>
+            <span id="estadoConexao" class="badge bg-secondary me-2">Conectando...</span>
+            <a asp-action="Create" class="btn btn-primary">+ Novo Chamado</a>
+        </div>
+    </div>
+
+    <div id="notificacaoSignalR" class="alert alert-info d-none" role="status"></div>
+
+    <!-- Resumo enviado continuamente pelo servidor (streaming do SignalR) -->
+    <div class="row g-3 mb-2">
+        <div class="col-6 col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold" id="contTotal">-</div>
+                    <div class="text-muted">Total</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-primary" id="contAbertos">-</div>
+                    <div class="text-muted">Abertos</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-warning" id="contAndamento">-</div>
+                    <div class="text-muted">Em andamento</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <div class="fs-2 fw-bold text-success" id="contResolvidos">-</div>
+                    <div class="text-muted">Resolvidos</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <p class="text-muted small mb-4">
+        Resumo recebido por streaming (SignalR), a cada 2 segundos.
+        <span id="atualizadoEm"></span>
+    </p>
+
+    <div class="card shadow-sm">
+        <div class="card-body" id="areaTabela">
+
+            <table id="tabelaChamados" class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Solicitante</th>
+                        <th>Prioridade</th>
+                        <th>Status</th>
+                        <th>Data</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var chamado in Model)
+                    {
+                        <tr>
+                            <td>@chamado.Id</td>
+                            <td>@chamado.Titulo</td>
+                            <td>@chamado.Solicitante</td>
+                            <td>@chamado.Prioridade</td>
+                            <td>
+                                <span class="badge @CentralChamados.Models.ChamadoOpcoes.ClasseBadge(chamado.Status)">
+                                    @chamado.Status
+                                </span>
+                            </td>
+                            <td>@chamado.DataAbertura.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>
+                                <a asp-action="Details" asp-route-id="@chamado.Id"
+                                   class="btn btn-sm btn-outline-primary">Detalhes</a>
+                                <a asp-action="Edit" asp-route-id="@chamado.Id"
+                                   class="btn btn-sm btn-outline-secondary">Editar</a>
+                                <a asp-action="Delete" asp-route-id="@chamado.Id"
+                                   class="btn btn-sm btn-outline-danger">Excluir</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (!Model.Any())
+            {
+                <p class="text-center text-muted">Nenhum chamado cadastrado.</p>
+            }
+
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@@8.0.7/dist/browser/signalr.min.js"></script>
+
+    <script>
+        const notificacao = document.getElementById("notificacaoSignalR");
+        const estadoConexao = document.getElementById("estadoConexao");
+
+        // Conexão com o Hub, com reconexão automática
+        const conexao = new signalR.HubConnectionBuilder()
+            .withUrl("/chamadosHub")
+            .withAutomaticReconnect()
+            .build();
+
+        let assinaturaStream = null;
+
+        function definirEstado(texto, classe) {
+            estadoConexao.textContent = texto;
+            estadoConexao.className = "badge me-2 " + classe;
+        }
+
+        function mostrarNotificacao(mensagem) {
+            notificacao.textContent = mensagem;
+            notificacao.classList.remove("d-none");
+        }
+
+        // Busca a listagem atual no servidor e troca só a área da tabela (sem F5)
+        async function atualizarTabela() {
+            try {
+                const resposta = await fetch("/Chamados", { cache: "no-store" });
+
+                if (!resposta.ok) {
+                    throw new Error("Erro ao buscar chamados.");
+                }
+
+                const html = await resposta.text();
+                const documento = new DOMParser().parseFromString(html, "text/html");
+
+                const areaNova = documento.querySelector("#areaTabela");
+                const areaAtual = document.querySelector("#areaTabela");
+
+                if (areaNova && areaAtual) {
+                    areaAtual.innerHTML = areaNova.innerHTML;
+                }
+            } catch (erro) {
+                console.error("Erro ao atualizar tabela:", erro);
+            }
+        }
+
+        // Mostra o resumo recebido por streaming
+        function mostrarResumo(resumo) {
+            document.getElementById("contTotal").textContent = resumo.total;
+            document.getElementById("contAbertos").textContent = resumo.abertos;
+            document.getElementById("contAndamento").textContent = resumo.emAndamento;
+            document.getElementById("contResolvidos").textContent = resumo.resolvidos;
+            document.getElementById("atualizadoEm").textContent =
+                "Última atualização: " + new Date().toLocaleTimeString("pt-BR");
+        }
+
+        // STREAMING: o servidor (StreamResumo) envia o resumo continuamente
+        function iniciarStream() {
+            try {
+                if (assinaturaStream) {
+                    assinaturaStream.dispose();
+                }
+            } catch (erro) {
+                console.warn("Stream anterior já estava encerrado.", erro);
+            }
+
+            assinaturaStream = conexao.stream("StreamResumo").subscribe({
+                next: mostrarResumo,
+                complete: function () { console.log("Stream finalizado."); },
+                error: function (erro) { console.warn("Stream interrompido:", erro); }
+            });
+        }
+
+        // Eventos enviados pelo servidor (nomes iguais aos do ChamadosController)
+        conexao.on("ChamadoCriado", function (chamado) {
+            mostrarNotificacao("Novo chamado #" + chamado.id + ": " + chamado.titulo);
+            atualizarTabela();
+        });
+
+        conexao.on("StatusAlterado", function (chamado) {
+            mostrarNotificacao("Chamado #" + chamado.id + " atualizado para: " + chamado.status);
+            atualizarTabela();
+        });
+
+        conexao.on("ChamadoEditado", function (chamado) {
+            mostrarNotificacao("Chamado #" + chamado.id + " foi editado: " + chamado.titulo);
+            atualizarTabela();
+        });
+
+        conexao.on("ChamadoExcluido", function (chamado) {
+            mostrarNotificacao("Chamado #" + chamado.id + " foi excluído.");
+            atualizarTabela();
+        });
+
+        // Estados da conexão
+        conexao.onreconnecting(function () {
+            definirEstado("Reconectando...", "bg-warning text-dark");
+        });
+
+        conexao.onreconnected(function () {
+            definirEstado("Conectado", "bg-success");
+            mostrarNotificacao("Conexão restabelecida.");
+            atualizarTabela();   // recupera o que pode ter sido perdido
+            iniciarStream();     // o stream antigo terminou, então começa outro
+        });
+
+        // Se a reconexão automática desistir, tenta iniciar de novo a cada 5 s
+        conexao.onclose(function () {
+            definirEstado("Desconectado", "bg-danger");
+            setTimeout(iniciarConexao, 5000);
+        });
+
+        async function iniciarConexao() {
+            try {
+                await conexao.start();
+                definirEstado("Conectado", "bg-success");
+                atualizarTabela();
+                iniciarStream();
+            } catch (erro) {
+                console.error("Erro no SignalR:", erro);
+                definirEstado("Desconectado", "bg-danger");
+                setTimeout(iniciarConexao, 5000);
+            }
+        }
+
+        iniciarConexao();
+    </script>
+}

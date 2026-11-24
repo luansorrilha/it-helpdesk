@@ -1,0 +1,58 @@
+@model CentralChamados.Models.Chamado
+
+@{
+    ViewData["Title"] = "Detalhes do Chamado";
+}
+
+<div class="container mt-4">
+
+    <h2 class="mb-4">Detalhes do Chamado #@Model.Id</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+
+            <h4>@Model.Titulo</h4>
+
+            <hr />
+
+            <p><strong>Descrição:</strong> @Model.Descricao</p>
+            <p><strong>Solicitante:</strong> @Model.Solicitante</p>
+            <p><strong>Prioridade:</strong> @Model.Prioridade</p>
+            <p>
+                <strong>Status atual:</strong>
+                <span class="badge @CentralChamados.Models.ChamadoOpcoes.ClasseBadge(Model.Status)">@Model.Status</span>
+            </p>
+            <p>
+                <strong>Data de abertura:</strong>
+                @Model.DataAbertura.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            </p>
+
+            <hr />
+
+            <h5>Alterar Status</h5>
+
+            <form asp-controller="Chamados"
+                  asp-action="AlterarStatus"
+                  asp-route-id="@Model.Id"
+                  method="post">
+
+                <div class="mb-3">
+                    <label for="status" class="form-label">Novo Status</label>
+
+                    <select id="status" name="status" class="form-select">
+                        @foreach (var status in CentralChamados.Models.ChamadoOpcoes.StatusValidos)
+                        {
+                            <option value="@status" selected="@(Model.Status == status)">@status</option>
+                        }
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-success">Salvar Status</button>
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-outline-secondary ms-2">Editar</a>
+                <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-outline-danger ms-2">Excluir</a>
+                <a asp-action="Index" class="btn btn-secondary ms-2">Voltar</a>
+            </form>
+
+        </div>
+    </div>
+</div>
